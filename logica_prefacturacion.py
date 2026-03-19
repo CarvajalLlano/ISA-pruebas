@@ -1,21 +1,21 @@
 import tempfile
 from pathlib import Path
 import streamlit as st
-
 import logica_prefacturacion as lp
 
 st.set_page_config(page_title="Prefacturación Excel", page_icon="📄")
 
 st.title("Prefacturación de archivos Excel")
 
+st.write("Funciones detectadas en el módulo:")
+st.code(str([x for x in dir(lp) if not x.startswith('__')]))
+
 archivo_subido = st.file_uploader("Sube el archivo de pedidos", type=["xlsx"])
 
 if archivo_subido:
-
     st.success(f"Archivo cargado: {archivo_subido.name}")
 
     if st.button("Procesar archivo"):
-
         try:
             with tempfile.TemporaryDirectory() as tmpdir:
                 tmpdir = Path(tmpdir)
@@ -27,14 +27,24 @@ if archivo_subido:
                     st.error("No se encontró el archivo de tarifas")
                     st.stop()
 
-                # Guardar archivo subido
                 with open(ruta_pedidos, "wb") as f:
                     f.write(archivo_subido.getbuffer())
 
-                # Inyectar rutas a tu lógica
                 lp.ARCHIVO_PEDIDOS = str(ruta_pedidos)
                 lp.SALIDA = str(ruta_pedidos)
                 lp.ARCHIVO_TARIFAS = str(ruta_tarifas)
+
+                if not hasattr(lp, "prefacturar"):
+                    st.error("El módulo no tiene la función prefacturar()")
+                    st.stop()
+
+                if not hasattr(lp, "prefacturar_paquete"):
+                    st.error("El módulo no tiene la función prefacturar_paquete()")
+                    st.stop()
+
+                if not hasattr(lp, "prefacturar_documento"):
+                    st.error("El módulo no tiene la función prefacturar_documento()")
+                    st.stop()
 
                 with st.spinner("Procesando..."):
                     lp.prefacturar()
@@ -43,7 +53,6 @@ if archivo_subido:
 
                 st.success("Proceso terminado")
 
-                # Descargar resultado
                 with open(ruta_pedidos, "rb") as f:
                     st.download_button(
                         "Descargar resultado",
