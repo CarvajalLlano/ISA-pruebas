@@ -471,9 +471,4 @@ def prefacturar_documento():
 
     except Exception as e:
         print(f"Error en el proceso de DOCUMENTO: {e}")
-# MAIN
-# =========================
-if __name__ == "__main__":
-    prefacturar()           # MERCANCIA
-    prefacturar_paquete()   # PAQUETE
-    prefacturar_documento() # DOCUMENTO
+
