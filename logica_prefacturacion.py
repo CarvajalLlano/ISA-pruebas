@@ -1,65 +1,83 @@
 import tempfile
 from pathlib import Path
 import streamlit as st
-import logica_prefacturacion as lp
+import motor_prefacturacion as motor
 
-st.set_page_config(page_title="Prefacturación Excel", page_icon="📄")
+st.set_page_config(page_title="Prefacturación Excel", page_icon="📄", layout="centered")
 
 st.title("Prefacturación de archivos Excel")
+st.caption("Carga el archivo de pedidos, ejecuta la conciliación y descarga el resultado.")
 
-st.write("Funciones detectadas en el módulo:")
-st.code(str([x for x in dir(lp) if not x.startswith('__')]))
+with st.container():
+    archivo_subido = st.file_uploader(
+        "Archivo de pedidos",
+        type=["xlsx"],
+        help="Debe contener las hojas MERCANCIA, PAQUETE y/o DOCUMENTO según el caso."
+    )
 
-archivo_subido = st.file_uploader("Sube el archivo de pedidos", type=["xlsx"])
+    ruta_tarifas = Path("Valor kilo destino Colvanes 2026.xlsx")
 
-if archivo_subido:
-    st.success(f"Archivo cargado: {archivo_subido.name}")
+    st.markdown("### Procesos a ejecutar")
+    proc_mercancia = st.checkbox("Mercancía", value=True)
+    proc_paquete = st.checkbox("Paquete", value=True)
+    proc_documento = st.checkbox("Documento", value=True)
 
-    if st.button("Procesar archivo"):
-        try:
-            with tempfile.TemporaryDirectory() as tmpdir:
-                tmpdir = Path(tmpdir)
+    ejecutar = st.button("Procesar archivo", type="primary", use_container_width=True)
 
-                ruta_pedidos = tmpdir / archivo_subido.name
-                ruta_tarifas = Path("Valor kilo destino Colvanes 2026.xlsx")
+if ejecutar:
+    if archivo_subido is None:
+        st.error("Primero debes subir un archivo Excel.")
+        st.stop()
 
-                if not ruta_tarifas.exists():
-                    st.error("No se encontró el archivo de tarifas")
-                    st.stop()
+    if not ruta_tarifas.exists():
+        st.error("No se encontró el archivo de tarifas: `Valor kilo destino Colvanes 2026.xlsx`")
+        st.stop()
 
-                with open(ruta_pedidos, "wb") as f:
-                    f.write(archivo_subido.getbuffer())
+    if not any([proc_mercancia, proc_paquete, proc_documento]):
+        st.error("Selecciona al menos un proceso.")
+        st.stop()
 
-                lp.ARCHIVO_PEDIDOS = str(ruta_pedidos)
-                lp.SALIDA = str(ruta_pedidos)
-                lp.ARCHIVO_TARIFAS = str(ruta_tarifas)
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmpdir = Path(tmpdir)
+            ruta_pedidos = tmpdir / archivo_subido.name
 
-                if not hasattr(lp, "prefacturar"):
-                    st.error("El módulo no tiene la función prefacturar()")
-                    st.stop()
+            with open(ruta_pedidos, "wb") as f:
+                f.write(archivo_subido.getbuffer())
 
-                if not hasattr(lp, "prefacturar_paquete"):
-                    st.error("El módulo no tiene la función prefacturar_paquete()")
-                    st.stop()
+            motor.ARCHIVO_PEDIDOS = str(ruta_pedidos)
+            motor.SALIDA = str(ruta_pedidos)
+            motor.ARCHIVO_TARIFAS = str(ruta_tarifas)
 
-                if not hasattr(lp, "prefacturar_documento"):
-                    st.error("El módulo no tiene la función prefacturar_documento()")
-                    st.stop()
+            tareas = []
+            if proc_mercancia:
+                tareas.append(("Mercancía", motor.prefacturar))
+            if proc_paquete:
+                tareas.append(("Paquete", motor.prefacturar_paquete))
+            if proc_documento:
+                tareas.append(("Documento", motor.prefacturar_documento))
 
-                with st.spinner("Procesando..."):
-                    lp.prefacturar()
-                    lp.prefacturar_paquete()
-                    lp.prefacturar_documento()
+            progreso = st.progress(0, text="Iniciando proceso...")
+            total = len(tareas)
 
-                st.success("Proceso terminado")
+            for i, (nombre, funcion) in enumerate(tareas, start=1):
+                progreso.progress((i - 1) / total, text=f"Procesando: {nombre}...")
+                funcion()
 
-                with open(ruta_pedidos, "rb") as f:
-                    st.download_button(
-                        "Descargar resultado",
-                        data=f.read(),
-                        file_name=f"resultado_{archivo_subido.name}",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    )
+            progreso.progress(1.0, text="Proceso completado")
 
-        except Exception as e:
-            st.error(f"Error: {e}")
+            st.success("El archivo fue procesado correctamente.")
+
+            with open(ruta_pedidos, "rb") as f:
+                st.download_button(
+                    label="Descargar resultado",
+                    data=f.read(),
+                    file_name=f"resultado_{archivo_subido.name}",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True
+                )
+
+    except KeyError as e:
+        st.error(f"Falta una columna esperada en el Excel: {e}")
+    except Exception as e:
+        st.error(f"Ocurrió un error durante el procesamiento: {e}")
